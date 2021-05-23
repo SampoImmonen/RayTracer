@@ -16,6 +16,8 @@
 #include "Camera.h"
 #include "Triangle.h"
 #include "RayhitResult.h"
+#include "Bvh.h"
+#include "Timer.h"
 
 const int width = 800;
 const int height = 600;
@@ -112,11 +114,13 @@ public:
 	std::vector<glm::vec3> data;
 
 	Image(int height, int width) : height(height), width(width) {
-		data.reserve(width * height);
+		//data.reserve(width * height);
+		data.resize(width * height, glm::vec3(0.0f));
 	}
 
 	void setColor(int i, int j, glm::vec3 color) {
-		data[j * width + i] = color;
+		//std::cout << i << " " << j << "\n";
+		data.at(j * width + i) = color;
 	}
 
 	void vec3tostream(std::ostream& out, const glm::vec3& vec) {
@@ -153,6 +157,8 @@ class Renderer {
 
 public:
 
+	Bvh bvh;
+
 	Renderer() : width(800),height(600), viewport_height(2.0f), viewport_width(2.0f*(800.0f/600.0f)){}
 	Renderer(int width, int height): width(width), height(height) {
 		viewport_height = 2.0;
@@ -163,6 +169,41 @@ public:
 		vertical = glm::vec3(0, viewport_height, 0);
 		lower_left_corner = origin - horizontal / 2.0f - vertical / 2.0f - glm::vec3(0, 0, focal_lenght);
 	}
+
+
+	void constructNode(
+		std::unique_ptr<BvhNode>& N,
+		std::vector<uint32_t>& indices,
+		const std::vector<Triangle>& Triangles,
+		uint32_t start,
+		uint32_t end)
+	{
+
+		// construct BB for triangles in node;
+
+
+		//find longest dim
+
+		//if not leaf partition triangles according to spatial median
+
+	}
+
+	void contructBvh(const std::vector<Triangle>& triangles) {
+		//initialize indices
+		uint32_t num_triangles = triangles.size();
+		std::vector<uint32_t> indices(num_triangles);
+		for (uint32_t i = 0; i < num_triangles; i++) {
+			indices[i] = i;
+		}
+		//init render bvh;
+		bvh = Bvh();
+		bvh.rootNode = std::unique_ptr<BvhNode>(new BvhNode());
+		//recursively construct BVH
+		constructNode(bvh.rootNode, indices, triangles, 0, num_triangles);
+		bvh.indices = indices;
+
+	}
+
 
 	RayhitResult raycast(const Ray& ray, const std::vector<Triangle>& triangles) const {
 
@@ -215,7 +256,7 @@ public:
 		Image im(height, width);
 		//std::cout << "P3\n" << width << ' ' << height << "\n255\n";
 		for (int j = height - 1; j >= 0; --j) {
-			std::cerr << "\rScanlines remaining: " << j << ' ' << std::flush;
+			//std::cerr << "\rScanlines remaining: " << j << ' ' << std::flush;
 			for (int i = 0; i < width; ++i) {
 
 				//calculate ray direction through pixel
@@ -236,7 +277,7 @@ public:
 				im.setColor(i, j, color);
 			}
 		}
-		im.printppm();
+		//im.printppm();
 	}
 
 };
@@ -256,8 +297,7 @@ void triangletoworld(std::vector<Triangle>& triangles, const glm::mat4& model) {
 int main()
 {
 
-	std::vector<Triangle> tt = loadScene("../ObjTriangleLoader/Models/testscene.obj");
-	
+	std::vector<Triangle> tt = loadScene(MODELS+std::string("testscene.obj"));
 	glm::vec3 pos = glm::vec3(0, 0, -5);
 	float scale = 2.0f;
 	glm::mat4 model(1.0f);
@@ -266,8 +306,12 @@ int main()
 	//std::cout << tt[0].vertices[0].z;
 	triangletoworld(tt, model);
 	//std::cout << std::max({ pos.x, pos.y, pos.z });
+	//std::cout << tt.size();
 	Renderer r(800, 600);
-	r.render(tt);
+	{	
+		Timer t;
+		r.render(tt);
+	}
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu

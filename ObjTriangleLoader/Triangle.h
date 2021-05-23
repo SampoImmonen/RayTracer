@@ -1,15 +1,19 @@
 #pragma once
 #include <array>
+#include <vector>
 
 #include <glm/glm.hpp>
 #include "Ray.h"
 
+
+
 struct BoundingBox {
-	
+	//Class for axis aligned bounding box
+
 	glm::vec3 min;
 	glm::vec3 max;
 
-	BoundingBox() {}
+	BoundingBox(){}
 	BoundingBox(const glm::vec3& max, const glm::vec3& min) : max(max), min(min) {}
 
 	inline float area() {
@@ -168,3 +172,4 @@ public:
 	}
 
 };
+
