@@ -13,8 +13,8 @@ struct BoundingBox {
 	glm::vec3 min;
 	glm::vec3 max;
 
-	BoundingBox(){}
-	BoundingBox(const glm::vec3& max, const glm::vec3& min) : max(max), min(min) {}
+	BoundingBox():min(glm::vec3(FLT_MAX)), max(glm::vec3(-FLT_MAX)){}
+	BoundingBox(const glm::vec3& min, const glm::vec3& max) : min(min), max(max) {}
 
 	inline float area() {
 		glm::vec3 d = max - min;
@@ -167,9 +167,36 @@ public:
 		return (vertices[0] + vertices[1] + vertices[2]) * (1.0f / 3.0f);
 	}
 
-	BoundingBox boundingbox() {
-		return BoundingBox(max(), min());
+	BoundingBox boundingbox() const {
+		return BoundingBox(min(), max());
 	}
 
 };
 
+
+inline bool AABBintersect(const BoundingBox& bb, const glm::vec3& orig, const glm::vec3& invD) {
+	float start, end;
+	for (int i = 0; i < 3; ++i) {
+		float t0 = (bb.min[i] - orig[i]) * invD[i];
+		float t1 = (bb.max[i] - orig[i]) * invD[i];
+		if (invD[i] < 0.0f) {
+			std::swap(t0, t1);
+		}
+		if (i == 0) {
+			start = t0;
+			end = t1;
+		}
+		else {
+			start = t0 > start ? t0 : start;
+			end = t1 < end ? t1 : end;
+		}
+		if (start > end) {
+			return false;
+		}
+		if (end < 0.0f) {
+			return false;
+		}
+	}
+	return true;
+
+}

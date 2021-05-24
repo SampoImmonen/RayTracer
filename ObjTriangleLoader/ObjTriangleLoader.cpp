@@ -141,6 +141,34 @@ public:
 };
 
 
+inline int longestdim(const BoundingBox& bb) {
+	//returns the index of the longest dimension of a bounding box
+	glm::vec3 dims = bb.max - bb.min;
+	float max = 0;
+	int index;
+	for (int i = 0; i < 3; ++i) {
+		if (dims[i] > max) {
+			max = dims[i];
+			index = i;
+		}
+	}
+	return index;
+}
+
+inline BoundingBox combineBoundingBoxes(const BoundingBox& bb_1, const BoundingBox& bb_2) {
+	//create a bounding box for two bounding boxes
+	glm::vec3 min(std::min(bb_1.min.x, bb_2.min.x), std::min(bb_1.min.y, bb_2.min.y), std::min(bb_1.min.z, bb_2.min.z));
+	glm::vec3 max(std::max(bb_1.max.x, bb_2.max.x), std::max(bb_1.max.y, bb_2.max.y), std::max(bb_1.max.z, bb_2.max.z));
+	return BoundingBox(min, max);
+}
+
+inline BoundingBox centroidBox(const BoundingBox& bb, const glm::vec3& v) {
+	glm::vec3 min(std::min(bb.min.x, v.x), std::min(bb.min.y, v.y), std::min(bb.min.z, v.z));
+	glm::vec3 max(std::max(bb.max.x, v.x), std::max(bb.max.y, v.y), std::max(bb.max.z, v.z));
+	return BoundingBox(min, max);
+}
+
+const int MAX_TRIS_PER_LEAF = 8;
 
 class Renderer {
 	int width;
@@ -154,6 +182,8 @@ class Renderer {
 	glm::vec3 horizontal;
 	glm::vec3 vertical;
 	glm::vec3 lower_left_corner;
+
+	std::vector<Triangle> m_triangles;
 
 public:
 
@@ -170,26 +200,56 @@ public:
 		lower_left_corner = origin - horizontal / 2.0f - vertical / 2.0f - glm::vec3(0, 0, focal_lenght);
 	}
 
+	void set_triangles(const std::vector<Triangle>& triangles) {
+		m_triangles = triangles;
+	}
 
 	void constructNode(
 		std::unique_ptr<BvhNode>& N,
 		std::vector<uint32_t>& indices,
-		const std::vector<Triangle>& Triangles,
+		const std::vector<Triangle>& triangles,
 		uint32_t start,
 		uint32_t end)
 	{
 
+		std::unique_ptr<BvhNode> B = std::make_unique<BvhNode>();
 		// construct BB for triangles in node;
+		// also consruct BB for triangle centroids
+		N->bb = BoundingBox();
+		B->bb = BoundingBox();
+		for (uint32_t i = start; i < end; ++i) {
+			N->bb = combineBoundingBoxes(N->bb, triangles[indices[i]].boundingbox());
+			B->bb = centroidBox(B->bb, triangles[indices[i]].centroid());
+		}
 
-
+		//set Node parameters
+		N->start = start;
+		N->end = end;
+	
 		//find longest dim
+		int dim = longestdim(B->bb);
 
 		//if not leaf partition triangles according to spatial median
+		if ((end - start) > MAX_TRIS_PER_LEAF) {
+			//std::cout << (end - start) << "\n";
+			uint32_t* i = nullptr;
+			//partition triangle indices according spatial median
+			float spatialMedian = B->bb.min[dim] + (B->bb.max[dim] - B->bb.min[dim]) / 2;
+			i = std::partition(&indices[start], &indices[start] + (end - start), [&triangles, spatialMedian, dim](int i) {return triangles[i].centroid()[dim] > spatialMedian; });
+			
+			//create child nodes
+			uint32_t newEnd = std::distance(&indices[start], i);
+			N->left = std::unique_ptr<BvhNode>(new BvhNode());
+			constructNode(N->left, indices, triangles, N->start, N->start + newEnd);
+			N->right = std::unique_ptr<BvhNode>(new BvhNode());
+			constructNode(N->right, indices, triangles, N->start+newEnd, N->end);
+		}
 
 	}
 
 	void contructBvh(const std::vector<Triangle>& triangles) {
 		//initialize indices
+		m_triangles = triangles;
 		uint32_t num_triangles = triangles.size();
 		std::vector<uint32_t> indices(num_triangles);
 		for (uint32_t i = 0; i < num_triangles; i++) {
@@ -201,13 +261,50 @@ public:
 		//recursively construct BVH
 		constructNode(bvh.rootNode, indices, triangles, 0, num_triangles);
 		bvh.indices = indices;
-
 	}
 
 
+	void bvhTraverse(std::unique_ptr<BvhNode>& N, const Ray& ray, const glm::vec3& invD, int& imin, float& tmin, float& umin, float& vmin) {
+		if (AABBintersect(N->bb, ray.orig, invD) && (N->left != nullptr)) {
+			bvhTraverse(N->left, ray, invD, imin, tmin, umin, vmin);
+			bvhTraverse(N->right, ray, invD, imin, tmin, umin, vmin);
+		}
+		if ((N->left == nullptr) && (N->right == nullptr)) {
+			for (int i = N->start; i < N->end; ++i) {
+				float t, u, v;
+				//triangle index
+				uint32_t t_index = bvh.getIndex(i);
+				if (m_triangles[t_index].mtIntersect(ray, t, u, v)) {
+					if (t > 0.0f && t < tmin) {
+						imin = t_index;
+						tmin = t;
+						umin = u;
+						vmin = v;
+					}
+				}
+			}
+		}
+
+	}
+
+	RayhitResult Bvhraycast(const Ray& ray) {
+		//Bvh traversal raycasting
+		//first with recursion later with local stack
+		float tmin = 100000.0f, umin = 0.0f, vmin = 0.0f;
+		int imin = -1;
+
+		glm::vec3 invD = glm::vec3(1 / ray.dir[0], 1 / ray.dir[1], 1 / ray.dir[2]);
+		RayhitResult result;
+		bvhTraverse(bvh.rootNode, ray, invD, imin, tmin, umin, vmin);
+		if (imin != -1) {
+			result = RayhitResult(&m_triangles[imin], tmin, umin, vmin, ray.at(tmin), ray);
+		}
+		return result;
+	}
+
 	RayhitResult raycast(const Ray& ray, const std::vector<Triangle>& triangles) const {
 
-		float tmin = 10000000.0f, umin = 0.0f, vmin = 0.0f;
+		float tmin = 1000.0f, umin = 0.0f, vmin = 0.0f;
 		int imin = -1;
 
 		//RaycastResult castresult;
@@ -265,7 +362,8 @@ public:
 				Ray ray = cam.get_ray(u, v);
 				
 				//return ray hit result
-				RayhitResult result = raycast(ray, triangles);
+				//RayhitResult result = raycast(ray, triangles);
+				RayhitResult result = Bvhraycast(ray);
 				//TODO SHADING CODE
 				//simple shading
 				glm::vec3 color(0.2, 0.5, 0.4);
@@ -292,8 +390,6 @@ void triangletoworld(std::vector<Triangle>& triangles, const glm::mat4& model) {
 	}
 }
 
-
-
 int main()
 {
 
@@ -308,6 +404,11 @@ int main()
 	//std::cout << std::max({ pos.x, pos.y, pos.z });
 	//std::cout << tt.size();
 	Renderer r(800, 600);
+	{
+		//Timer t;
+		r.contructBvh(tt);
+	}
+
 	{	
 		Timer t;
 		r.render(tt);
