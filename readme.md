@@ -8,4 +8,5 @@
 
 # Todo backlog
 1. linear time SAH score
-2. better camera
+2. Add all dimension to SAH score calculation (easy)
+3. better camera

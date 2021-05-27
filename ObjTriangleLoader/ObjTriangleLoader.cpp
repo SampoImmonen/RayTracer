@@ -204,6 +204,7 @@ class Renderer {
 public:
 
 	Bvh bvh;
+	std::vector<FlatBvhNode> m_flatnodes;
 
 	Renderer() : width(800),height(600), viewport_height(2.0f), viewport_width(2.0f*(800.0f/600.0f)){}
 	Renderer(int width, int height): width(width), height(height) {
@@ -221,7 +222,7 @@ public:
 	}
 
 	void constructNode(
-		std::unique_ptr<BvhNode>& N,
+		BvhNode* N,
 		std::vector<uint16_t>& indices,
 		const std::vector<Triangle>& triangles,
 		uint16_t start,
@@ -231,7 +232,7 @@ public:
 	{
 
 		nodecount++;
-		std::unique_ptr<BvhNode> B = std::make_unique<BvhNode>();
+		std::shared_ptr<BvhNode> B = std::make_unique<BvhNode>();
 		// construct BB for triangles in node;
 		// also consruct BB for triangle centroids
 		N->bb = BoundingBox();
@@ -317,13 +318,37 @@ public:
 
 			//create child nodes
 			uint16_t newEnd = std::distance(&indices[start], splitIndex);
-			N->left = std::unique_ptr<BvhNode>(new BvhNode());
+			N->left = new BvhNode();
 			constructNode(N->left, indices, triangles, N->start, N->start + newEnd, nodecount, mode);
-			N->right = std::unique_ptr<BvhNode>(new BvhNode());
+			N->right = new BvhNode;
 			constructNode(N->right, indices, triangles, N->start+newEnd, N->end, nodecount,  mode);
 		}
 
 	}
+
+	
+	int FlattenBvhTree(BvhNode* N, int* offset) {
+
+		FlatBvhNode* v = &m_flatnodes[*offset];
+		v->bb = N->bb;
+		int myOffset = (*offset)++;
+		if (N->left == nullptr  && N->right==nullptr) {
+			//handle leaf nodes
+			v->start = N->start;
+			v->num_triangles = N->end - N->start;
+		}
+		else {
+			//handle interior nodes
+			//we dont care about this at this point (maybe later)
+			v->axis;
+			v->num_triangles = 0;
+			FlattenBvhTree(N->left, offset);
+			v->childOffset = FlattenBvhTree(N->right, offset);
+		}
+		return myOffset;
+		}
+	
+
 
 	void contructBvh(const std::vector<Triangle>& triangles, int mode = 2) {
 		//initialize indices
@@ -335,16 +360,19 @@ public:
 		}
 		//init render bvh;
 		bvh = Bvh();
-		bvh.rootNode = std::unique_ptr<BvhNode>(new BvhNode());
+		bvh.rootNode = new BvhNode();
 		//recursively construct BVH
 		int nodecount = 0;
 		constructNode(bvh.rootNode, indices, triangles, 0, num_triangles, nodecount, mode);
 		bvh.n_nodes = nodecount;
 		bvh.indices = indices;
+		m_flatnodes.resize(nodecount);
+		int offset = 0;
+		FlattenBvhTree(bvh.rootNode, &offset);
 	}
 
 
-	void bvhTraverse(std::unique_ptr<BvhNode>& N, const Ray& ray, const glm::vec3& invD, int& imin, float& tmin, float& umin, float& vmin) {
+	void bvhTraverse(BvhNode* N, const Ray& ray, const glm::vec3& invD, int& imin, float& tmin, float& umin, float& vmin) {
 		if (AABBintersect(N->bb, ray.orig, invD) && (N->left != nullptr)) {
 			bvhTraverse(N->left, ray, invD, imin, tmin, umin, vmin);
 			bvhTraverse(N->right, ray, invD, imin, tmin, umin, vmin);
@@ -474,10 +502,11 @@ void triangletoworld(std::vector<Triangle>& triangles, const glm::mat4& model) {
 	}
 }
 
+
 int main()
 {
 
-	std::vector<Triangle> tt = loadScene(MODELS+std::string("testscene.obj"));
+	std::vector<Triangle> tt = loadScene(MODELS+std::string("cornell.obj"));
 	glm::vec3 pos = glm::vec3(0, 0, -5);
 	float scale = 2.0f;
 	glm::mat4 model(1.0f);
@@ -498,6 +527,10 @@ int main()
 		r.render(tt);
 	}
 	
+	for (int i = 0; i < r.m_flatnodes.size(); i++) {
+		std::cout << r.m_flatnodes[i].axis << "\n";
+	}
+
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
