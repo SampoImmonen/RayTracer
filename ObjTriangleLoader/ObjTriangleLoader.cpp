@@ -7,6 +7,7 @@
 #include <string>
 #include <algorithm> 
 #include <memory>
+#include <fstream>
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -130,12 +131,28 @@ public:
 	}
 
 	void printppm() {
+		//used in console
 		std::cout << "P3\n" << width << ' ' << height << "\n255\n";
 		for (int j = height - 1; j >= 0; --j) {
 			for (int i = 0; i < width; ++i) {
 				vec3tostream(std::cout, data[j * width + i]);
 			}
 		}
+	}
+
+	void tofile(const std::string& filepath = "image.ppm") {
+		//save image to ppm file 
+		//openfile stream push stuff in it
+		std::ofstream image_file;
+		image_file.open(filepath);
+		image_file << "P3\n" << width << ' ' << height << "\n255\n";
+		for (int j = height - 1; j >= 0; --j) {
+			for (int i = 0; i < width; ++i) {
+				vec3tostream(image_file, data[j * width + i]);
+			}
+		}
+		image_file.close();
+
 	}
 	//overloading []????
 };
@@ -486,8 +503,7 @@ public:
 			}
 		}
 		//write image to ppm
-		//at the moment written to std::cout
-		//im.printppm();
+		im.tofile("image1.ppm");
 	}
 
 };
@@ -506,7 +522,7 @@ void triangletoworld(std::vector<Triangle>& triangles, const glm::mat4& model) {
 int main()
 {
 
-	std::vector<Triangle> tt = loadScene(MODELS+std::string("cornell.obj"));
+	std::vector<Triangle> tt = loadScene(MODELS+std::string("testscene.obj"));
 	glm::vec3 pos = glm::vec3(0, 0, -5);
 	float scale = 2.0f;
 	glm::mat4 model(1.0f);
@@ -525,10 +541,6 @@ int main()
 	{	
 		Timer t;
 		r.render(tt);
-	}
-	
-	for (int i = 0; i < r.m_flatnodes.size(); i++) {
-		std::cout << r.m_flatnodes[i].axis << "\n";
 	}
 
 }
