@@ -5,7 +5,7 @@
 
 struct BvhNode {
 	BoundingBox bb;
-	size_t start, end;
+	uint16_t start, end;
 	std::unique_ptr<BvhNode> left;
 	std::unique_ptr<BvhNode> right;
 
@@ -13,11 +13,16 @@ struct BvhNode {
 
 };
 
+struct FlatBvhNode {
+	BoundingBox bb;
+
+};
+
 class Bvh {
 
 public:
 
-	Bvh() {};
+	Bvh(){};
 
 	Bvh& operator=(Bvh&& other) {
 		std::swap(rootNode, other.rootNode);
@@ -27,9 +32,9 @@ public:
 
 	BvhNode& root() { return *rootNode; }
 	const BvhNode& root() const { return *rootNode; }
-	uint32_t	getIndex(uint32_t index) const { return indices[index]; }
+	uint16_t	getIndex(uint16_t index) const { return indices[index]; }
 
 	std::unique_ptr<BvhNode> rootNode;
-	std::vector<uint32_t> indices;
-
+	std::vector<uint16_t> indices;
+	int n_nodes = 0;
 };

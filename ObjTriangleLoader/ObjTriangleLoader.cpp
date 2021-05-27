@@ -170,7 +170,23 @@ inline BoundingBox centroidBox(const BoundingBox& bb, const glm::vec3& v) {
 
 const int MAX_TRIS_PER_LEAF = 8;
 
+struct BucketInfo {
+	int count = 0;
+	BoundingBox bb;
+};
+
+inline glm::vec3 bbOffset(const BoundingBox& bb, const glm::vec3& vec) {
+	// calculates the offset of the vector from the min corner to the max corner
+	// (0,0,0) means min corner and (1,1,1) means max corner
+	glm::vec3 o = vec - bb.min;
+	if (bb.max.x > bb.min.x) o.x /= bb.max.x - bb.min.x;
+	if (bb.max.y > bb.min.y) o.y /= bb.max.y - bb.min.y;
+	if (bb.max.z > bb.min.z) o.z /= bb.max.z - bb.min.z;
+	return o;
+}
+
 class Renderer {
+	
 	int width;
 	int height;
 
@@ -206,20 +222,23 @@ public:
 
 	void constructNode(
 		std::unique_ptr<BvhNode>& N,
-		std::vector<uint32_t>& indices,
+		std::vector<uint16_t>& indices,
 		const std::vector<Triangle>& triangles,
-		uint32_t start,
-		uint32_t end)
+		uint16_t start,
+		uint16_t end,
+		int& nodecount,
+		int mode = 2)
 	{
 
+		nodecount++;
 		std::unique_ptr<BvhNode> B = std::make_unique<BvhNode>();
 		// construct BB for triangles in node;
 		// also consruct BB for triangle centroids
 		N->bb = BoundingBox();
 		B->bb = BoundingBox();
-		for (uint32_t i = start; i < end; ++i) {
+		for (uint16_t i = start; i < end; ++i) {
 			N->bb = combineBoundingBoxes(N->bb, triangles[indices[i]].boundingbox());
-			B->bb = centroidBox(B->bb, triangles[indices[i]].centroid());
+			B->bb = centroidBox(B->bb, triangles[indices[i]].boundingbox().centroid());
 		}
 
 		//set Node parameters
@@ -232,34 +251,95 @@ public:
 		//if not leaf partition triangles according to spatial median
 		if ((end - start) > MAX_TRIS_PER_LEAF) {
 			//std::cout << (end - start) << "\n";
-			uint32_t* i = nullptr;
+			uint16_t* splitIndex = nullptr;
 			//partition triangle indices according spatial median
 			float spatialMedian = B->bb.min[dim] + (B->bb.max[dim] - B->bb.min[dim]) / 2;
-			i = std::partition(&indices[start], &indices[start] + (end - start), [&triangles, spatialMedian, dim](int i) {return triangles[i].centroid()[dim] > spatialMedian; });
-			
+			if (mode == 1){
+				//Spatial Median
+				splitIndex = std::partition(&indices[start], &indices[start] + (end - start), [&triangles, spatialMedian, dim](uint32_t i) {return triangles[i].boundingbox().centroid()[dim] > spatialMedian; });
+			}
+			else if (mode == 2) {
+				// SAH (Surface Area Heuristic)
+				constexpr int nBuckets = 12;
+				BoundingBox centroidBB = B->bb;
+				// create buckets uniformingly separated inside the centroid bb
+				BucketInfo buckets[nBuckets];
+				// for each bucket calculate num of triangles and and bb of triangles
+				for (uint16_t i = start; i < end; ++i) {
+					int b = nBuckets * bbOffset(centroidBB, triangles[indices[i]].boundingbox().centroid())[dim];
+					if (b == nBuckets) b = nBuckets - 1;
+					buckets[b].count++;
+					buckets[b].bb = combineBoundingBoxes(buckets[b].bb, triangles[indices[i]].boundingbox());
+				}
+				// loop through buckets calculate sah score
+				float cost[nBuckets - 1];
+				for (int i = 0; i < nBuckets - 1; ++i) {
+					BoundingBox bb1, bb2;
+					int count1 = 0, count2 = 0;
+					// calculate bb and count of left tris
+					for (int j = 0; j <= i; ++j) {
+						bb1 = combineBoundingBoxes(bb1, buckets[j].bb);
+						count1 += buckets[j].count;
+					}
+					// calculate bb and count of right tris
+					for (int j = i+1; j < nBuckets; ++j) {
+						bb2 = combineBoundingBoxes(bb2, buckets[j].bb);
+						count2 += buckets[j].count;
+					}
+					//calculate SAH score
+					//cost[i] = 0.125f * (count1 * bb1.area()+count2*bb2.area())/N->bb.area();
+					cost[i] = .125f+(count1 * bb1.area() + count2 * bb2.area()) / N->bb.area();
+					//cost[i] = count1 * bb1.area() + count2 * bb2.area();
+				}
+				// select separation with best sah score
+				float minCost = cost[0];
+				int minIndex = 0;
+				for (int i = 1; i < nBuckets - 1; ++i) {
+					if (cost[i] < minCost) {
+						minCost = cost[i];
+						minIndex = i;
+					}
+				}
+
+				float leafCost = end - start;
+				//partition tris along best split
+				splitIndex = std::partition(&indices[start], &indices[start] + (end - start), [=](uint16_t i) {
+					int b = nBuckets * bbOffset(centroidBB, triangles[i].boundingbox().centroid())[dim];
+					if (b == nBuckets) b = nBuckets - 1;
+					return b <= minIndex;
+				});
+
+				if (leafCost < minCost) {
+					return;
+				}
+
+			}
+
 			//create child nodes
-			uint32_t newEnd = std::distance(&indices[start], i);
+			uint16_t newEnd = std::distance(&indices[start], splitIndex);
 			N->left = std::unique_ptr<BvhNode>(new BvhNode());
-			constructNode(N->left, indices, triangles, N->start, N->start + newEnd);
+			constructNode(N->left, indices, triangles, N->start, N->start + newEnd, nodecount, mode);
 			N->right = std::unique_ptr<BvhNode>(new BvhNode());
-			constructNode(N->right, indices, triangles, N->start+newEnd, N->end);
+			constructNode(N->right, indices, triangles, N->start+newEnd, N->end, nodecount,  mode);
 		}
 
 	}
 
-	void contructBvh(const std::vector<Triangle>& triangles) {
+	void contructBvh(const std::vector<Triangle>& triangles, int mode = 2) {
 		//initialize indices
 		m_triangles = triangles;
-		uint32_t num_triangles = triangles.size();
-		std::vector<uint32_t> indices(num_triangles);
-		for (uint32_t i = 0; i < num_triangles; i++) {
+		uint16_t num_triangles = triangles.size();
+		std::vector<uint16_t> indices(num_triangles);
+		for (uint16_t i = 0; i < num_triangles; i++) {
 			indices[i] = i;
 		}
 		//init render bvh;
 		bvh = Bvh();
 		bvh.rootNode = std::unique_ptr<BvhNode>(new BvhNode());
 		//recursively construct BVH
-		constructNode(bvh.rootNode, indices, triangles, 0, num_triangles);
+		int nodecount = 0;
+		constructNode(bvh.rootNode, indices, triangles, 0, num_triangles, nodecount, mode);
+		bvh.n_nodes = nodecount;
 		bvh.indices = indices;
 	}
 
@@ -273,7 +353,7 @@ public:
 			for (int i = N->start; i < N->end; ++i) {
 				float t, u, v;
 				//triangle index
-				uint32_t t_index = bvh.getIndex(i);
+				uint16_t t_index = bvh.getIndex(i);
 				if (m_triangles[t_index].mtIntersect(ray, t, u, v)) {
 					if (t > 0.0f && t < tmin) {
 						imin = t_index;
@@ -290,7 +370,7 @@ public:
 	RayhitResult Bvhraycast(const Ray& ray) {
 		//Bvh traversal raycasting
 		//first with recursion later with local stack
-		float tmin = 100000.0f, umin = 0.0f, vmin = 0.0f;
+		float tmin = 10.0f, umin = 0.0f, vmin = 0.0f;
 		int imin = -1;
 
 		glm::vec3 invD = glm::vec3(1 / ray.dir[0], 1 / ray.dir[1], 1 / ray.dir[2]);
@@ -344,15 +424,17 @@ public:
 		
 		float aspect_ratio = (float)(width) / height;
 		
-		glm::vec3 cam_pos(0.0f, 0.0f,-1);
-		glm::vec3 cam_dir(0, 0, -5.0f);
+		glm::vec3 cam_pos(0.0f, 0.0f,0.0f);
+		glm::vec3 cam_dir(0, 0.0f, -5.0f);
 		glm::vec3 up(0, 1.0f, 0);
 
 		Camera cam(cam_pos, cam_dir, up, 90.0f, aspect_ratio);
 
 		Image im(height, width);
-		//std::cout << "P3\n" << width << ' ' << height << "\n255\n";
-		for (int j = height - 1; j >= 0; --j) {
+		
+		// if multihreading is on make shading code thread safe
+		#pragma omp parallel for
+		for (int j = 0; j < height; ++j) {
 			//std::cerr << "\rScanlines remaining: " << j << ' ' << std::flush;
 			for (int i = 0; i < width; ++i) {
 
@@ -375,6 +457,8 @@ public:
 				im.setColor(i, j, color);
 			}
 		}
+		//write image to ppm
+		//at the moment written to std::cout
 		//im.printppm();
 	}
 
@@ -406,13 +490,14 @@ int main()
 	Renderer r(800, 600);
 	{
 		//Timer t;
-		r.contructBvh(tt);
+		r.contructBvh(tt, 2);
 	}
-
+	//std::cout << tt.size();
 	{	
 		Timer t;
 		r.render(tt);
 	}
+	
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu

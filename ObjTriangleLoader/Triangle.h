@@ -18,8 +18,13 @@ struct BoundingBox {
 
 	inline float area() {
 		glm::vec3 d = max - min;
-		return 2 * (d.x * d.y + d.x * d.z + d.y * d.z);
+		return 2.0f * (d.x * d.y + d.x * d.z + d.y * d.z);
 	}
+
+	inline glm::vec3 centroid() {
+		return 0.5f * max + 0.5f * min;
+	}
+
 };
 
 

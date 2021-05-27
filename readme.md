@@ -1,8 +1,11 @@
-# Todo
+# Todo (priority)
 
-1. BVH
-2. BVH with SAH
-3. Multithreading
-4. other easy optimizations
-5. diffuse materials
-6. refactoring
+1. SAH
+2. flatten BVH + loop traversal
+3. bvh saving and loading 
+4. support materials and diffuse shading
+5. refactor code
+
+# Todo backlog
+1. linear time SAH score
+2. better camera
