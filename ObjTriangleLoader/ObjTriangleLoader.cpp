@@ -265,7 +265,7 @@ public:
 	
 		//find longest dim
 		int dim = longestdim(B->bb);
-
+		N->splitAxis = dim;
 		//if not leaf partition triangles according to spatial median
 		if ((end - start) > MAX_TRIS_PER_LEAF) {
 			//std::cout << (end - start) << "\n";
@@ -332,7 +332,7 @@ public:
 				}
 
 			}
-
+			
 			//create child nodes
 			uint16_t newEnd = std::distance(&indices[start], splitIndex);
 			N->left = new BvhNode();
@@ -357,7 +357,7 @@ public:
 		else {
 			//handle interior nodes
 			//we dont care about this at this point (maybe later)
-			v->axis;
+			v->axis = N->splitAxis;
 			v->num_triangles = 0;
 			FlattenBvhTree(N->left, offset);
 			v->childOffset = FlattenBvhTree(N->right, offset);
@@ -388,6 +388,63 @@ public:
 		FlattenBvhTree(bvh.rootNode, &offset);
 	}
 
+	RayhitResult FlatBvhTraverse(const Ray& ray){
+		
+		float tmin = 100.0f, umin = 0.0f, vmin = 0.0f;
+		int imin = -1;
+
+		RayhitResult result;
+
+		//init variable needed in calculations
+		glm::vec3 invD = glm::vec3(1 / ray.dir.x, 1 / ray.dir.y, 1 / ray.dir.z);
+		int dirisNeg[3] = { invD.x < 0, invD.y < 0, invD.z < 0 };
+		int toVisitOffset = 0, currentNodeIndex = 0;
+		int nodesToVisit[64];
+		
+		while (true) {
+			const FlatBvhNode* node = &m_flatnodes[currentNodeIndex];
+			if (AABBintersect(node->bb, ray.orig, invD)) {
+				if (node->num_triangles > 0) {
+					//leaf node intersect with tris
+					float t, u, v;
+					for (int i = node->start; i < node->start + node->num_triangles; ++i) {
+						uint16_t t_index = bvh.getIndex(i);
+						if (m_triangles[t_index].mtIntersect(ray, t, u, v)) {
+							if (t > 0.0f && t < tmin) {
+								imin = t_index;
+								tmin = t;
+								umin = u;
+								vmin = v;
+							}
+						}
+					}
+					if (toVisitOffset == 0) break;
+					currentNodeIndex = nodesToVisit[--toVisitOffset];
+				}
+				else {
+					if (dirisNeg[node->axis]) {
+						nodesToVisit[toVisitOffset++] = currentNodeIndex + 1;
+						currentNodeIndex = node->childOffset;
+					}
+					else {
+						nodesToVisit[toVisitOffset++] = node->childOffset;
+						currentNodeIndex = currentNodeIndex + 1;
+					}
+
+				}
+			}
+			else {
+				if (toVisitOffset == 0) break;
+				currentNodeIndex = nodesToVisit[--toVisitOffset];
+			}
+		}
+
+		if (imin != -1) {
+			result = RayhitResult(&m_triangles[imin], tmin, umin, vmin, ray.at(tmin), ray);
+		}
+
+		return result;
+	}
 
 	void bvhTraverse(BvhNode* N, const Ray& ray, const glm::vec3& invD, int& imin, float& tmin, float& umin, float& vmin) {
 		if (AABBintersect(N->bb, ray.orig, invD) && (N->left != nullptr)) {
@@ -465,11 +522,11 @@ public:
 			<< static_cast<int>(255.999 * vec.z) << '\n';
 	}
 
-	void render(const std::vector<Triangle>& triangles) {
+	void render() {
 		
 		float aspect_ratio = (float)(width) / height;
 		
-		glm::vec3 cam_pos(0.0f, 0.0f,0.0f);
+		glm::vec3 cam_pos(0.0f, 1.0f,0.0f);
 		glm::vec3 cam_dir(0, 0.0f, -5.0f);
 		glm::vec3 up(0, 1.0f, 0);
 
@@ -478,30 +535,35 @@ public:
 		Image im(height, width);
 		
 		// if multihreading is on make shading code thread safe
-		#pragma omp parallel for
-		for (int j = 0; j < height; ++j) {
-			//std::cerr << "\rScanlines remaining: " << j << ' ' << std::flush;
-			for (int i = 0; i < width; ++i) {
+		{
+			Timer t;
+			#pragma omp parallel for
+			for (int j = 0; j < height; ++j) {
+				//std::cerr << "\rScanlines remaining: " << j << ' ' << std::flush;
+				for (int i = 0; i < width; ++i) {
 
-				//calculate ray direction through pixel
-				auto u = float(i) / (width - 1);
-				auto v = float(j) / (height - 1);
-				Ray ray = cam.get_ray(u, v);
-				
-				//return ray hit result
-				//RayhitResult result = raycast(ray, triangles);
-				RayhitResult result = Bvhraycast(ray);
-				//TODO SHADING CODE
-				//simple shading
-				glm::vec3 color(0.2, 0.5, 0.4);
-				if (result.tri != nullptr) {
-					color = glm::vec3(result.u, result.v,1-result.u-result.v);
+					//calculate ray direction through pixel
+					auto u = float(i) / (width - 1);
+					auto v = float(j) / (height - 1);
+					Ray ray = cam.get_ray(u, v);
+
+					//return ray hit result
+					//RayhitResult result = raycast(ray, triangles);
+					//RayhitResult result = Bvhraycast(ray);
+					RayhitResult result = FlatBvhTraverse(ray);
+					//TODO SHADING CODE
+					//simple shading
+					glm::vec3 color(0.2, 0.5, 0.4);
+					if (result.tri != nullptr) {
+						color = glm::vec3(result.u, result.v, 1 - result.u - result.v);
+					}
+					//vec3tostream(std::cout, color);
+					im.setColor(i, j, color);
 				}
-
-				//vec3tostream(std::cout, color);
-				im.setColor(i, j, color);
+			
 			}
 		}
+		
 		//write image to ppm
 		im.tofile("image1.ppm");
 	}
@@ -534,15 +596,12 @@ int main()
 	//std::cout << tt.size();
 	Renderer r(800, 600);
 	{
-		//Timer t;
-		r.contructBvh(tt, 2);
+		r.contructBvh(tt);
 	}
 	//std::cout << tt.size();
-	{	
-		Timer t;
-		r.render(tt);
+	{
+		r.render();
 	}
-
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu

@@ -8,6 +8,7 @@ struct BvhNode {
 	uint16_t start, end;
 	BvhNode* left;
 	BvhNode* right;
+	int splitAxis;
 
 	BvhNode(): bb(), start(0), end(0), left(nullptr), right(nullptr){}
 	~BvhNode() {
