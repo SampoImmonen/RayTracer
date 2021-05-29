@@ -19,6 +19,7 @@
 #include "RayhitResult.h"
 #include "Bvh.h"
 #include "Timer.h"
+#include "Utils.h"
 
 const int width = 800;
 const int height = 600;
@@ -221,7 +222,7 @@ class Renderer {
 public:
 
 	Bvh bvh;
-	std::vector<FlatBvhNode> m_flatnodes;
+	//std::vector<FlatBvhNode> m_flatnodes;
 
 	Renderer() : width(800),height(600), viewport_height(2.0f), viewport_width(2.0f*(800.0f/600.0f)){}
 	Renderer(int width, int height): width(width), height(height) {
@@ -343,29 +344,6 @@ public:
 
 	}
 
-	
-	int FlattenBvhTree(BvhNode* N, int* offset) {
-
-		FlatBvhNode* v = &m_flatnodes[*offset];
-		v->bb = N->bb;
-		int myOffset = (*offset)++;
-		if (N->left == nullptr  && N->right==nullptr) {
-			//handle leaf nodes
-			v->start = N->start;
-			v->num_triangles = N->end - N->start;
-		}
-		else {
-			//handle interior nodes
-			//we dont care about this at this point (maybe later)
-			v->axis = N->splitAxis;
-			v->num_triangles = 0;
-			FlattenBvhTree(N->left, offset);
-			v->childOffset = FlattenBvhTree(N->right, offset);
-		}
-		return myOffset;
-		}
-	
-
 
 	void contructBvh(const std::vector<Triangle>& triangles, int mode = 2) {
 		//initialize indices
@@ -383,9 +361,10 @@ public:
 		constructNode(bvh.rootNode, indices, triangles, 0, num_triangles, nodecount, mode);
 		bvh.n_nodes = nodecount;
 		bvh.indices = indices;
-		m_flatnodes.resize(nodecount);
+		bvh.initFlatBvh();
+		//m_flatnodes.resize(nodecount);
 		int offset = 0;
-		FlattenBvhTree(bvh.rootNode, &offset);
+		bvh.FlattenBvhTree(bvh.rootNode, &offset);
 	}
 
 	RayhitResult FlatBvhTraverse(const Ray& ray){
@@ -402,7 +381,7 @@ public:
 		int nodesToVisit[64];
 		
 		while (true) {
-			const FlatBvhNode* node = &m_flatnodes[currentNodeIndex];
+			const FlatBvhNode* node = &bvh.flatnodes[currentNodeIndex];
 			if (AABBintersect(node->bb, ray.orig, invD)) {
 				if (node->num_triangles > 0) {
 					//leaf node intersect with tris
@@ -596,12 +575,45 @@ int main()
 	//std::cout << tt.size();
 	Renderer r(800, 600);
 	{
-		r.contructBvh(tt);
+		//r.contructBvh(tt);
+
 	}
+
+	r.set_triangles(tt);
+	r.bvh.load("testscene.txt");
 	//std::cout << tt.size();
 	{
 		r.render();
 	}
+
+	//r.bvh.save("testscene.txt");
+	/*
+	std::ofstream of("testi.txt");
+	FlatBvhNode n;
+	n.bb.min = glm::vec3(-2.003f);
+	n.bb.max = glm::vec3(2.445f);
+	n.start = 3;
+	n.num_triangles = 10;
+	n.axis = 3;
+	of << n;
+	n.start = 12;
+	of << n;
+	uint8_t l = 4;
+	of << l;
+	of.close();
+	std::ifstream f("testi.txt");
+	glm::vec3 v;
+	FlatBvhNode n2;
+	f >> n2;
+	std::cout << n2.start;
+	printvec3(n2.bb.max);
+	std::cout << "\n";
+	f >> n2;
+	std::cout << n2.axis;
+	printvec3(n2.bb.max);
+	*/
+
+
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu

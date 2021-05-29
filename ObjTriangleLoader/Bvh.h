@@ -1,7 +1,11 @@
 #pragma once
 
-#include<memory>
+#include <memory>
+#include <fstream>
+#include <string>
+
 #include "Triangle.h"
+#include "Utils.h"
 
 struct BvhNode {
 	BoundingBox bb;
@@ -27,6 +31,20 @@ struct FlatBvhNode {
 	uint8_t axis;
 	uint8_t pad[1];
 };
+
+std::ofstream& operator<<(std::ofstream& of, const FlatBvhNode& n) {
+	of << n.bb.min;
+	of << n.bb.max;
+	of << n.start << " " << n.num_triangles << " " << static_cast<unsigned>(n.axis) << std::endl;
+
+	return of;	
+}
+
+std::ifstream& operator>>(std::ifstream& is, FlatBvhNode& n) {
+	is >> n.bb.min >> n.bb.max >> n.start >> n.num_triangles >> n.axis;
+	return is;
+}
+
 
 class Bvh {
 
@@ -56,5 +74,71 @@ public:
 		flatnodes.resize(n_nodes, FlatBvhNode());
 	}
 
+	int FlattenBvhTree(BvhNode* N, int* offset) {
 
+		FlatBvhNode* v = &flatnodes[*offset];
+		v->bb = N->bb;
+		int myOffset = (*offset)++;
+		if (N->left == nullptr && N->right == nullptr) {
+			//handle leaf nodes
+			v->start = N->start;
+			v->num_triangles = N->end - N->start;
+		}
+		else {
+			//handle interior nodes
+			//we dont care about this at this point (maybe later)
+			v->axis = N->splitAxis;
+			v->num_triangles = 0;
+			FlattenBvhTree(N->left, offset);
+			v->childOffset = FlattenBvhTree(N->right, offset);
+		}
+		return myOffset;
+	}
+
+	void save(const std::string& filepath) {
+
+		std::cout << "saving Bvh of scene into: " + filepath << "\n";
+		std::ofstream savefile(filepath.c_str());
+
+		//store number of indices and number of nodes
+		savefile << indices.size() << "\n";
+		savefile << n_nodes << "\n";
+		//save indices
+		for (auto& i : indices) {
+			savefile << i << " ";
+		}
+		//save FlatBvhNodes
+		for (auto& n : flatnodes) {
+			savefile << n;
+		}
+		
+	}
+
+	void load(const std::string& filepath) {
+		
+
+		std::cout << "loading bvh from path: " + filepath << "\n";
+		std::ifstream loadfile(filepath.c_str());
+		
+		// load number of indices and nodes
+		size_t num_indices;
+		loadfile >> num_indices;
+		loadfile >> n_nodes;
+
+		// load indices
+		std::cout << "loading indices\n";
+		indices.resize(num_indices);
+		for (size_t i = 0; i < num_indices; ++i) {
+			loadfile >> indices[i];
+		}
+
+		// load FlatBvhNodes
+		std::cout << "loading nodes\n";
+		flatnodes.resize(n_nodes);
+		for (int i = 0; i < n_nodes; ++i) {
+			FlatBvhNode n;
+			loadfile >> n;
+			flatnodes[i] = n;
+		}
+	}
 };
