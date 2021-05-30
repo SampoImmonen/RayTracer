@@ -120,25 +120,30 @@ public:
 		std::cout << "loading bvh from path: " + filepath << "\n";
 		std::ifstream loadfile(filepath.c_str());
 		
-		// load number of indices and nodes
-		size_t num_indices;
-		loadfile >> num_indices;
-		loadfile >> n_nodes;
+		if (loadfile) {
+			// load number of indices and nodes
+			size_t num_indices;
+			loadfile >> num_indices;
+			loadfile >> n_nodes;
 
-		// load indices
-		std::cout << "loading indices\n";
-		indices.resize(num_indices);
-		for (size_t i = 0; i < num_indices; ++i) {
-			loadfile >> indices[i];
+			// load indices
+			std::cout << "loading indices\n";
+			indices.resize(num_indices);
+			for (size_t i = 0; i < num_indices; ++i) {
+				loadfile >> indices[i];
+			}
+
+			// load FlatBvhNodes
+			std::cout << "loading nodes\n";
+			flatnodes.resize(n_nodes);
+			for (int i = 0; i < n_nodes; ++i) {
+				FlatBvhNode n;
+				loadfile >> n;
+				flatnodes[i] = n;
+			}
 		}
-
-		// load FlatBvhNodes
-		std::cout << "loading nodes\n";
-		flatnodes.resize(n_nodes);
-		for (int i = 0; i < n_nodes; ++i) {
-			FlatBvhNode n;
-			loadfile >> n;
-			flatnodes[i] = n;
+		else {
+			std::cout << "Failed to open file " + filepath << "\n";
 		}
 	}
 };

@@ -22,3 +22,7 @@ std::ifstream& operator>>(std::ifstream& is, glm::vec3& v) {
 }
 
 
+template <typename T>
+void printline(T x) {
+	std::cout << x << "\n";
+}

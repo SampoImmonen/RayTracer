@@ -580,49 +580,12 @@ int main()
 	}
 
 	r.set_triangles(tt);
-	r.bvh.load("testscene.txt");
+	r.bvh.load("testscene.bvh");
+	//r.bvh.save("testscene.bvh");
 	//std::cout << tt.size();
 	{
 		r.render();
 	}
 
-	//r.bvh.save("testscene.txt");
-	/*
-	std::ofstream of("testi.txt");
-	FlatBvhNode n;
-	n.bb.min = glm::vec3(-2.003f);
-	n.bb.max = glm::vec3(2.445f);
-	n.start = 3;
-	n.num_triangles = 10;
-	n.axis = 3;
-	of << n;
-	n.start = 12;
-	of << n;
-	uint8_t l = 4;
-	of << l;
-	of.close();
-	std::ifstream f("testi.txt");
-	glm::vec3 v;
-	FlatBvhNode n2;
-	f >> n2;
-	std::cout << n2.start;
-	printvec3(n2.bb.max);
-	std::cout << "\n";
-	f >> n2;
-	std::cout << n2.axis;
-	printvec3(n2.bb.max);
-	*/
-
-
+	printline("kolome juustoo");
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
