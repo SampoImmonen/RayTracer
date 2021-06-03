@@ -1,6 +1,8 @@
 #pragma once
 #include <array>
+#include <string>
 #include <vector>
+
 
 #include <glm/glm.hpp>
 #include "Ray.h"
@@ -28,18 +30,51 @@ struct BoundingBox {
 };
 
 
+
+
+struct CMaterial {
+
+	glm::vec3 ambient;
+	glm::vec3 diffuse;
+	glm::vec3 specular;
+	glm::vec3 emission;
+
+	float glossiness;
+
+	//names of textures
+	std::string ambient_tex;
+	std::string diffuse_tex;
+	std::string specular_tex;
+	std::string bump_tex;
+
+	CMaterial(){
+		ambient = glm::vec3(0.0f);
+		diffuse = glm::vec3(0.75f);
+		specular = glm::vec3(0.5f);
+		emission = glm::vec3(0.0f);
+		glossiness = 32.0f;
+	}
+	~CMaterial(){}
+};
+
+
 class Triangle {
 public:
 	std::array<glm::vec3, 3> vertices;
+	std::array<glm::vec2, 3> txCoordinates;
+
 	glm::vec3 normal;
 	glm::vec3 color = glm::vec3(1.0f, 1.0f, 0.2f);
 	glm::mat3 M;
 	glm::vec3 N;
 
 	//TODO Materials
+	std::shared_ptr<CMaterial> material = nullptr;
 
 	Triangle(std::array<glm::vec3, 3> vertices) : vertices(vertices) {
 		normal = glm::normalize(glm::cross(vertices[1] - vertices[0], vertices[2] - vertices[0]));
+		
+		/*
 		M[0] = vertices[1] - vertices[0];
 		M[1] = vertices[2] - vertices[0];
 		M[2] = normal;
@@ -47,7 +82,14 @@ public:
 		M = glm::inverse(M);
 
 		N = -M * vertices[0];
+		*/
 	}
+
+
+	Triangle(std::array<glm::vec3, 3> vertices, std::array<glm::vec2, 3> txCoordinates) : vertices(vertices), txCoordinates(txCoordinates){
+		normal = glm::normalize(glm::cross(vertices[1] - vertices[0], vertices[2] - vertices[0]));
+	}
+
 
 	void calculate_normal() {
 		normal = glm::normalize(glm::cross(vertices[1] - vertices[0], vertices[2] - vertices[0]));
@@ -59,6 +101,8 @@ public:
 			v = glm::vec3(model * glm::vec4(v, 1.0f));
 		}
 		calculate_normal();
+		
+		// does not work!!!
 		M[0] = vertices[1] - vertices[0];
 		M[1] = vertices[2] - vertices[0];
 		M[2] = normal;

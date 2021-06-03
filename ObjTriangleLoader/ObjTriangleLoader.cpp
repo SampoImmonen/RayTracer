@@ -8,6 +8,7 @@
 #include <algorithm> 
 #include <memory>
 #include <fstream>
+#include <cstdlib>
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -50,6 +51,24 @@ std::vector<Triangle> loadScene(const std::string& path) {
 		exit(1);
 	}
 
+	std::vector<std::shared_ptr<CMaterial>> custom_materials;
+
+	//init own material structs;
+	for (auto& mat : materials) {
+		auto cmat = std::make_shared<CMaterial>();
+		cmat->ambient = listToVec3(mat.ambient);
+		cmat->diffuse = listToVec3(mat.diffuse);
+		cmat->specular = listToVec3(mat.specular);
+		cmat->emission = listToVec3(mat.emission);
+		cmat->glossiness = mat.shininess;
+		cmat->ambient_tex = mat.ambient_texname;
+		cmat->diffuse_tex = mat.diffuse_texname;
+		cmat->specular_tex = mat.specular_texname;
+		cmat->bump_tex = mat.bump_texname;
+		custom_materials.push_back(cmat);
+	}
+
+
 	// Loop over shapes
 	for (size_t s = 0; s < shapes.size(); s++) {
 		// Loop over faces(polygon)
@@ -58,6 +77,7 @@ std::vector<Triangle> loadScene(const std::string& path) {
 		for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
 			size_t fv = size_t(shapes[s].mesh.num_face_vertices[f]);
 			std::array<glm::vec3, 3> vertices;
+			std::array<glm::vec2, 3> txCoordinates;
 			// Loop over vertices in the face.
 			for (size_t v = 0; v < fv; v++) {
 				// access to vertex
@@ -78,23 +98,24 @@ std::vector<Triangle> loadScene(const std::string& path) {
 				*/
 
 				// Check if `texcoord_index` is zero or positive. negative = no texcoord data
-				/*
 				if (idx.texcoord_index >= 0) {
 					tinyobj::real_t tx = attrib.texcoords[2 * size_t(idx.texcoord_index) + 0];
 					tinyobj::real_t ty = attrib.texcoords[2 * size_t(idx.texcoord_index) + 1];
+					txCoordinates[v] = glm::vec2(tx, ty);
 				}
-				*/
 				// Optional: vertex colors
 				// tinyobj::real_t red   = attrib.colors[3*size_t(idx.vertex_index)+0];
 				// tinyobj::real_t green = attrib.colors[3*size_t(idx.vertex_index)+1];
 				// tinyobj::real_t blue  = attrib.colors[3*size_t(idx.vertex_index)+2];
 			}
-			triangles.push_back(Triangle(vertices));
+			
 			index_offset += fv;
 
 			// per-face material
-			//auto mat = shapes[s].mesh.material_ids[f];
-			//std::cout << mat;
+			auto mat = shapes[s].mesh.material_ids[f];
+			Triangle t(vertices, txCoordinates);
+			t.material = custom_materials[mat];
+			triangles.push_back(t);
 		}
 	}
 	return triangles;
@@ -108,6 +129,8 @@ glm::vec3 ray_color(const Ray& ray) {
 
 
 class Image {
+	// class to store and render image produced by ray tracer
+	//Extended version in Helmi (Integrated soon...)
 public:
 
 	const int height;
@@ -217,12 +240,13 @@ class Renderer {
 	glm::vec3 vertical;
 	glm::vec3 lower_left_corner;
 
-	std::vector<Triangle> m_triangles;
+	
 
 public:
 
+	std::vector<Triangle> m_triangles;
 	Bvh bvh;
-	//std::vector<FlatBvhNode> m_flatnodes;
+
 
 	Renderer() : width(800),height(600), viewport_height(2.0f), viewport_width(2.0f*(800.0f/600.0f)){}
 	Renderer(int width, int height): width(width), height(height) {
@@ -389,7 +413,7 @@ public:
 					for (int i = node->start; i < node->start + node->num_triangles; ++i) {
 						uint16_t t_index = bvh.getIndex(i);
 						if (m_triangles[t_index].mtIntersect(ray, t, u, v)) {
-							if (t > 0.0f && t < tmin) {
+							if (t > 1.0f && t < tmin) {
 								imin = t_index;
 								tmin = t;
 								umin = u;
@@ -501,12 +525,20 @@ public:
 			<< static_cast<int>(255.999 * vec.z) << '\n';
 	}
 
+	glm::vec3 HeadlightShading(const RayhitResult& rt) {
+		glm::vec3 n = rt.tri->normal;
+
+		float d = std::abs(glm::dot(n, glm::normalize(rt.point - rt.ray.orig)));
+		return d * rt.tri->material->diffuse;
+	}
+
+
 	void render() {
 		
 		float aspect_ratio = (float)(width) / height;
 		
-		glm::vec3 cam_pos(0.0f, 1.0f,0.0f);
-		glm::vec3 cam_dir(0, 0.0f, -5.0f);
+		glm::vec3 cam_pos(-0.5f, 1.5f,0.0f);
+		glm::vec3 cam_dir(0, -1.5f, -5.0f);
 		glm::vec3 up(0, 1.0f, 0);
 
 		Camera cam(cam_pos, cam_dir, up, 90.0f, aspect_ratio);
@@ -534,7 +566,8 @@ public:
 					//simple shading
 					glm::vec3 color(0.2, 0.5, 0.4);
 					if (result.tri != nullptr) {
-						color = glm::vec3(result.u, result.v, 1 - result.u - result.v);
+						//color = glm::vec3(result.u, result.v, 1 - result.u - result.v);
+						color = HeadlightShading(result);
 					}
 					//vec3tostream(std::cout, color);
 					im.setColor(i, j, color);
@@ -563,9 +596,9 @@ void triangletoworld(std::vector<Triangle>& triangles, const glm::mat4& model) {
 int main()
 {
 
-	std::vector<Triangle> tt = loadScene(MODELS+std::string("testscene.obj"));
-	glm::vec3 pos = glm::vec3(0, 0, -5);
-	float scale = 2.0f;
+	std::vector<Triangle> tt = loadScene(MODELS+std::string("cornell.obj"));
+	glm::vec3 pos = glm::vec3(0, 0, 0);
+	float scale = 10.0f;
 	glm::mat4 model(1.0f);
 	model = glm::translate(model, pos);
 	model = glm::scale(model, glm::vec3(scale));
@@ -575,17 +608,16 @@ int main()
 	//std::cout << tt.size();
 	Renderer r(800, 600);
 	{
-		//r.contructBvh(tt);
+		r.contructBvh(tt, 1);
 
 	}
 
 	r.set_triangles(tt);
-	r.bvh.load("testscene.bvh");
+	//r.bvh.load("testscene.bvh");
 	//r.bvh.save("testscene.bvh");
 	//std::cout << tt.size();
 	{
 		r.render();
 	}
 
-	printline("kolome juustoo");
 }
