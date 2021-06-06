@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -157,14 +157,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="App.cpp" />
     <ClCompile Include="ObjTriangleLoader.cpp" />
-    <ClCompile Include="Ray.cpp" />
+    <ClCompile Include="RImage.cpp" />
+    <ClCompile Include="RRenderer.cpp" />
+    <ClCompile Include="RTTriangle.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="App.h" />
     <ClInclude Include="Bvh.h" />
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="RImage.h" />
+    <ClInclude Include="RRenderer.h" />
+    <ClInclude Include="RTTriangle.h" />
     <ClInclude Include="Timer.h" />
-    <ClInclude Include="Triangle.h" />
     <ClInclude Include="Ray.h" />
     <ClInclude Include="RayhitResult.h" />
     <ClInclude Include="tiny_obj_loader.h" />

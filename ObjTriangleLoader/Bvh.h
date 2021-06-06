@@ -3,9 +3,12 @@
 #include <memory>
 #include <fstream>
 #include <string>
+#include <iostream>
 
-#include "Triangle.h"
+#include "RTTriangle.h"
 #include "Utils.h"
+
+namespace Helmi {
 
 struct BvhNode {
 	BoundingBox bb;
@@ -32,19 +35,22 @@ struct FlatBvhNode {
 	uint8_t pad[1];
 };
 
-std::ofstream& operator<<(std::ofstream& of, const FlatBvhNode& n) {
+
+inline std::ofstream& operator<<(std::ofstream& of, const FlatBvhNode& n) {
 	of << n.bb.min;
 	of << n.bb.max;
 	of << n.start << " " << n.num_triangles << " " << static_cast<unsigned>(n.axis) << std::endl;
 
-	return of;	
+	return of;
 }
 
-std::ifstream& operator>>(std::ifstream& is, FlatBvhNode& n) {
+inline std::ifstream& operator>>(std::ifstream& is, FlatBvhNode& n) {
 	is >> n.bb.min >> n.bb.max >> n.start >> n.num_triangles >> n.axis;
 	return is;
 }
 
+
+//overload glm::vec3 for serialization
 
 class Bvh {
 
@@ -147,3 +153,5 @@ public:
 		}
 	}
 };
+
+}

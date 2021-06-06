@@ -2,6 +2,8 @@
 
 #include <glm/glm.hpp>
 
+namespace Helmi {
+
 class Ray
 {
 public:
@@ -21,4 +23,4 @@ public:
 		return orig + t * dir;
 	}
 };
-
+}

@@ -4,8 +4,12 @@
 #include "math.h"
 #include "Ray.h"
 
+namespace Helmi {
+
 class Camera {
 public:
+
+	Camera(){}
 
 	Camera(
 		glm::vec3 lookfrom,
@@ -41,3 +45,5 @@ private:
 	glm::vec3 horizontal;
 	glm::vec3 vertical;
 };
+
+}
